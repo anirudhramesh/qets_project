@@ -1,23 +1,88 @@
 import pandas as pd
 import os
+from multiprocessing import Process, Queue
 
-main_file = 'taq_aug_2019_quotes_500_tickers.csv'
+
+column_names = ['DATE', 'TIME_M', 'EX', 'BID', 'BIDSIZ', 'ASK', 'ASKSIZ', 'SYM_ROOT', 'SYM_SUFFIX']
 
 
-def process_chunk(chunk, file_process_queue):
-    if len(chunk.ticker.unique()) == 1:
-        ticker = chunk.ticker.unique()[0]
-        file_name = os.path.join('taq_aug_2019_quotes', ticker+'.csv')
+def iterate_chunk(data_chunks, file_process_queue):
+    for chunk in data_chunks:
+        chunk.columns = column_names
+        for ticker in chunk.SYM_ROOT.unique():
+            file_process_queue.put((chunk[chunk.SYM_ROOT == ticker], ticker+'.csv'))
+
+
+def file_write_queue_processor(file_path, file_process_queue):
+    tickers = []
+    processes = []
+    while True:
+        write_data = file_process_queue.get()
+        if isinstance(write_data, str):
+            break
+        if write_data[1] in tickers:
+            processes[tickers.index(write_data[1])][1].put(write_data[0])
+        else:
+            some_queue = Queue()
+            processes.append((Process(target=file_writer, args=(os.path.join(file_path, write_data[1]), some_queue)),
+                              some_queue))
+            some_queue.put(write_data[0])
+            processes[-1][0].start()
+            tickers.append(write_data[1])
+
+    for proc in processes:
+        proc[1].put('Fin.')
+        proc[0].join()
+
+
+def file_writer(file_name, data_queue):
+    while True:
+        val = data_queue.get()
+        if isinstance(val, str):
+            break
         if os.path.exists(file_name):
             header = False
         else:
             header = True
+        with open(file_name, 'a') as f:
+            val.to_csv(f, header=header, index=False)
+            f.close()
 
 
-def file_writer(file_process_queue):
+def file_reader(main_file, file_process_queue):
+    chunksize = 10**3
+    per_process_chunk = 10**4
+    skiprows = 1
+    total_rows = 4636032216
+
+    processes = []
+
+    while skiprows < total_rows:
+        data_chunk = pd.read_csv(main_file, skiprows=skiprows, header=None, chunksize=chunksize,
+                                 nrows=chunksize * per_process_chunk)
+        processes.append(Process(target=iterate_chunk, args=(data_chunk, file_process_queue)))
+        processes[-1].start()
+        skiprows += chunksize * per_process_chunk
+
+    for proc in processes:
+        proc.join()
+
+    file_process_queue.put('Fin.')
 
 
+def main():
+    # main_file = 'taq_aug_2019_quotes_500_tickers.csv'
+    main_file = 'taq_aug_2019_quotes_500_tickers.csv'
+    output_file_path = 'taq_aug_2019_quotes'
 
-def file_reader():
-    chunksize = 10**8
+    file_process_queue = Queue()
+    file_write_process = Process(target=file_write_queue_processor, args=(output_file_path, file_process_queue))
+    file_write_process.start()
 
+    file_reader(main_file, file_process_queue)
+
+    file_write_process.join()
+
+
+if __name__ == '__main__':
+    main()
