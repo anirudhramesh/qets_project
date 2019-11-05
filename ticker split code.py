@@ -14,8 +14,8 @@ def iterate_chunk(data_chunks, file_process_queue):
         count += 1
         for ticker in chunk.SYM_ROOT.unique():
             file_process_queue.put((chunk[chunk.SYM_ROOT == ticker], ticker+'.csv'))
-        if count % 1000 == 0:
-            sleep(10)
+        # while len(file_process_queue) > 5:
+        # 	pass
 
 
 def file_write_queue_processor(file_path, file_process_queue):
@@ -28,12 +28,14 @@ def file_write_queue_processor(file_path, file_process_queue):
         if write_data[1] in tickers:
             processes[tickers.index(write_data[1])][1].put(write_data[0])
         else:
-            some_queue = Queue()
+            some_queue = Queue(maxsize=5)
             processes.append((Process(target=file_writer, args=(os.path.join(file_path, write_data[1]), some_queue)),
                               some_queue))
             some_queue.put(write_data[0])
             processes[-1][0].start()
             tickers.append(write_data[1])
+        # while sum([len(proc[1]) for proc in processes]) > 5:
+        # 	pass
 
     for proc in processes:
         proc[1].put('Fin.')
@@ -55,8 +57,8 @@ def file_writer(file_name, data_queue):
 
 
 def file_reader(main_file, file_process_queue):
-    chunksize = 10**3
-    per_process_chunk = 10**4
+    chunksize = 10**6
+    per_process_chunk = 10**3
     skiprows = 1
     total_rows = 4636032216
 
@@ -76,10 +78,10 @@ def file_reader(main_file, file_process_queue):
 
 
 def main():
-    main_file = 'taq_aug_2019_quotes_500_tickers.csv'
-    output_file_path = 'taq_aug_2019_quotes'
+    main_file = 'sample_50M_rows_taq_aug_2019_quotes_500_tickers.csv'
+    output_file_path = 'taq_aug_2019_quotes_parallel'
 
-    file_process_queue = Queue()
+    file_process_queue = Queue(maxsize=5)
     file_write_process = Process(target=file_write_queue_processor, args=(output_file_path, file_process_queue))
     file_write_process.start()
 

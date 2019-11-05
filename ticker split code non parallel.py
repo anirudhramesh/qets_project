@@ -11,12 +11,13 @@ def main():
 
     for chunk in chunk_generator:
         for ticker in chunk.SYM_ROOT.unique():
+            print(ticker)
             if os.path.exists(os.path.join(output_file_path, ticker+'.csv')):
                 header = False
             else:
                 header = True
             with open(os.path.join(output_file_path, ticker+'.csv'), 'a') as f:
-                chunk.to_csv(f, header=header, index=False)
+                chunk[chunk.SYM_ROOT == ticker].to_csv(f, header=header, index=False)
                 f.close()
 
 
