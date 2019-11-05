@@ -1,16 +1,21 @@
 import pandas as pd
 import os
 from multiprocessing import Process, Queue
+from time import sleep
 
 
 column_names = ['DATE', 'TIME_M', 'EX', 'BID', 'BIDSIZ', 'ASK', 'ASKSIZ', 'SYM_ROOT', 'SYM_SUFFIX']
 
 
 def iterate_chunk(data_chunks, file_process_queue):
+    count = 0
     for chunk in data_chunks:
         chunk.columns = column_names
+        count += 1
         for ticker in chunk.SYM_ROOT.unique():
             file_process_queue.put((chunk[chunk.SYM_ROOT == ticker], ticker+'.csv'))
+        if count % 1000 == 0:
+            sleep(10)
 
 
 def file_write_queue_processor(file_path, file_process_queue):
@@ -71,7 +76,6 @@ def file_reader(main_file, file_process_queue):
 
 
 def main():
-    # main_file = 'taq_aug_2019_quotes_500_tickers.csv'
     main_file = 'taq_aug_2019_quotes_500_tickers.csv'
     output_file_path = 'taq_aug_2019_quotes'
 
