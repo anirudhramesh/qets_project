@@ -21,25 +21,17 @@ def printer():
 def sorter(original_file):
     final_file = original_file.replace('.csv', '_sorted.csv')
     temp_file = 'temp_'+path.split(final_file)[1]
-    for df in pd.read_csv(original_file, chunksize=10 ** 6):
-        try:
-            df['DATE_TIME'] = df.DATE.astype(str) + ' ' + df.TIME_M.astype(str)
-        except AttributeError as e:
-            print(e)
-            print(path.split(final_file)[1].replace('.csv', ''))
-            break
-        df.DATE_TIME = pd.to_datetime(df.DATE_TIME)
-        df.sort_values('DATE_TIME', inplace=True)
-        df.drop(['DATE', 'TIME_M', 'SYM_SUFFIX'], axis=1, inplace=True)
+    for df in pd.read_csv(original_file, chunksize=10 ** 6, parse_dates=[[0, 1]], infer_datetime_format=True):
+        df.sort_values('DATE_TIME_M', inplace=True)
+        df.drop(['SYM_SUFFIX'], axis=1, inplace=True)
 
         try:
-            other_frame = pd.read_csv(final_file, nrows=2)
+            other_frame = pd.read_csv(final_file, nrows=2, parse_dates=[0], infer_datetime_format=True)
         except FileNotFoundError:
             df.to_csv(final_file, index=False)
             continue
-        other_frame.DATE_TIME = pd.to_datetime(other_frame.DATE_TIME)
 
-        if df.DATE_TIME.iloc[0] > other_frame.DATE_TIME.iloc[0]:
+        if df.DATE_TIME_M.iloc[0] > other_frame.DATE_TIME_M.iloc[0]:
             with open(final_file, 'a') as f:
                 df.to_csv(f, header=False, index=False)
                 f.close()
@@ -104,8 +96,8 @@ def main():
     printer_process = Process(target=printer)
     printer_process.start()
 
-    check_caller()
-    # sort_caller()
+    # check_caller()
+    sort_caller()
 
     print_queue.put('fin')
     printer_process.join()
